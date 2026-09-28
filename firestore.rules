@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && getUserData(request.auth.uid).role == 'admin';
+    }
+
+    function isVerifiedSeller() {
+      return isAuthenticated() &&
+        getUserData(request.auth.uid).role == 'seller' &&
+        getUserData(request.auth.uid).isVerified == true;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      // Allow initial profile creation upon sign up
+      allow create: if isOwner(userId)
+                    && request.resource.data.role in ['tenant', 'seller']
+                    && request.resource.data.isVerified == false;
+      // Allow profile updates without self-elevating role or isVerified
+      allow update: if (isOwner(userId)
+                    && request.resource.data.role == resource.data.role
+                    && request.resource.data.isVerified == resource.data.isVerified)
+                    || isAdmin();
+      allow delete: if isAdmin();
+
+      // Nested Favorites subcollection
+      match /favorites/{favoriteId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Verifications Collection
+    match /verifications/{verificationId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.sellerId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.sellerId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Listings Collection
+    match /listings/{listingId} {
+      allow read: if true;
+      allow create: if isVerifiedSeller() && request.resource.data.sellerId == request.auth.uid;
+      allow update, delete: if (isVerifiedSeller() && resource.data.sellerId == request.auth.uid) || isAdmin();
+    }
+
+    // Inquiries Collection
+    match /inquiries/{inquiryId} {
+      allow read: if isAuthenticated() && (
+        resource.data.tenantId == request.auth.uid ||
+        resource.data.sellerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && request.resource.data.tenantId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.sellerId == request.auth.uid ||
+        resource.data.tenantId == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Scoped Real-time Chats Collection
+    match /chats/{inquiryId}/messages/{messageId} {
+      function getInquiry() {
+        return get(/databases/$(database)/documents/inquiries/$(inquiryId)).data;
+      }
+
+      function isInquiryParticipant() {
+        return isAuthenticated() && (
+          getInquiry().tenantId == request.auth.uid ||
+          getInquiry().sellerId == request.auth.uid ||
+          isAdmin()
+        );
+      }
+
+      allow read: if isInquiryParticipant();
+      allow create: if isInquiryParticipant() && request.resource.data.senderId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

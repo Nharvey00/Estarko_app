@@ -5,6 +5,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../favorites/providers/favorite_provider.dart';
 import '../../favorites/views/favorites_screen.dart';
 import '../../profile/views/profile_screen.dart';
+import '../../../shared/widgets/estar_floating_nav_dock.dart';
 import 'tenant_dashboard_screen.dart';
 import 'tenant_inquiries_screen.dart';
 
@@ -23,6 +24,29 @@ class _TenantMainScreenState extends State<TenantMainScreen> {
     FavoritesScreen(),
     TenantInquiriesScreen(),
     ProfileScreen(),
+  ];
+
+  static const List<EstarDockItem> _dockItems = [
+    EstarDockItem(
+      icon: Icons.explore_outlined,
+      activeIcon: Icons.explore_rounded,
+      label: 'Discover',
+    ),
+    EstarDockItem(
+      icon: Icons.favorite_border_rounded,
+      activeIcon: Icons.favorite_rounded,
+      label: 'Saved',
+    ),
+    EstarDockItem(
+      icon: Icons.chat_bubble_outline_rounded,
+      activeIcon: Icons.chat_bubble_rounded,
+      label: 'Inquiries',
+    ),
+    EstarDockItem(
+      icon: Icons.person_outline_rounded,
+      activeIcon: Icons.person_rounded,
+      label: 'Profile',
+    ),
   ];
 
   @override
@@ -47,64 +71,37 @@ class _TenantMainScreenState extends State<TenantMainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
-      ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x0F000000),
-              blurRadius: 16.0,
-              offset: Offset(0, -4),
+      backgroundColor: const Color(0xFFFAFAFA),
+      extendBody: true,
+      body: Stack(
+        children: [
+          // Content screens extend all the way behind the floating nav dock
+          Positioned.fill(
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: _screens,
             ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
-          backgroundColor: Colors.white,
-          elevation: 0,
-          selectedItemColor: const Color(0xFFE11D48),
-          unselectedItemColor: Colors.grey.shade400,
-          selectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 12.0,
           ),
-          unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 12.0,
+
+          // Floating iOS-Style Navigation Dock
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: bottomPadding > 0 ? bottomPadding + 6.0 : 18.0,
+            child: EstarFloatingNavDock(
+              currentIndex: _selectedIndex,
+              onTap: (index) {
+                setState(() {
+                  _selectedIndex = index;
+                });
+              },
+              items: _dockItems,
+            ),
           ),
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.search_rounded),
-              label: 'Discover',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.favorite_border_rounded),
-              activeIcon: Icon(Icons.favorite_rounded),
-              label: 'Saved',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.calendar_month_outlined),
-              activeIcon: Icon(Icons.calendar_month),
-              label: 'Inquiries',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline_rounded),
-              activeIcon: Icon(Icons.person_rounded),
-              label: 'Profile',
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }

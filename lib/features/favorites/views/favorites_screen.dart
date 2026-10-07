@@ -318,7 +318,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Padding(
-                    padding: EdgeInsets.fromLTRB(20.0, 16.0, 20.0, 8.0),
+                    padding: EdgeInsets.fromLTRB(24.0, 16.0, 24.0, 8.0),
                     child: Text(
                       'Saved Properties',
                       style: TextStyle(
@@ -335,7 +335,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             }
 
             return ListView(
-              padding: const EdgeInsets.fromLTRB(20.0, 16.0, 20.0, 32.0),
+              padding: const EdgeInsets.fromLTRB(24.0, 16.0, 24.0, 120.0),
               children: [
                 const Text(
                   'Saved Properties',

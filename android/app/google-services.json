@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "915256475660",
+    "firebase_url": "https://estarko-2026-default-rtdb.asia-southeast1.firebasedatabase.app",
     "project_id": "estarko-2026",
     "storage_bucket": "estarko-2026.firebasestorage.app"
   },
@@ -12,7 +13,20 @@
           "package_name": "com.example.estarko_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "915256475660-jdf2qchbdjlccejo61r2s4dnnuh2mr95.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.estarko_app",
+            "certificate_hash": "e1bb493ee992894cc0d895c6e3b308a014813f89"
+          }
+        },
+        {
+          "client_id": "915256475660-0s2o703io6lso10btk9qi7n4b0hut7ls.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyA03K2DphO95_UIMdN0yLlg-ayFCNMB1wM"
@@ -20,7 +34,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "915256475660-0s2o703io6lso10btk9qi7n4b0hut7ls.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "915256475660-qtco6rebomlm71esbfro647tl7p39h47.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.estarkoApp"
+              }
+            }
+          ]
         }
       }
     }

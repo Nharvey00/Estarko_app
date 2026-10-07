@@ -31,9 +31,13 @@ class UserModel {
       parsedCreatedAt = DateTime.now();
     }
 
+    final String name = (map['displayName'] as String?)?.isNotEmpty == true
+        ? map['displayName'] as String
+        : (map['name'] as String? ?? '');
+
     return UserModel(
       uid: documentId,
-      name: map['name'] ?? '',
+      name: name,
       email: map['email'] ?? '',
       role: map['role'] ?? 'tenant',
       isVerified: map['isVerified'] ?? false,
@@ -47,6 +51,7 @@ class UserModel {
     return {
       'uid': uid,
       'name': name,
+      'displayName': name,
       'email': email,
       'role': role,
       'isVerified': isVerified,

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,6 +12,8 @@ import '../../../core/services/cloudinary_service.dart';
 import '../../../core/services/location_service.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/custom_text_field.dart';
+import '../../../shared/widgets/estar_friendly_error.dart';
+import '../../../shared/widgets/estar_sticky_bottom_bar.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../monetization/views/mock_checkout_screen.dart';
 import '../models/listing_model.dart';
@@ -45,6 +48,9 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
   @override
   void initState() {
     super.initState();
+    _amenitiesController.addListener(() {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkListingQuota();
     });
@@ -58,7 +64,11 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
         return authProvider.currentUser!.uid;
       }
     } catch (_) {}
-    return FirebaseAuth.instance.currentUser?.uid ?? '';
+    try {
+      return FirebaseAuth.instance.currentUser?.uid ?? '';
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<void> _checkListingQuota() async {
@@ -92,7 +102,9 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
   }
 
   Future<void> _pickImage(int index) async {
+    if (_isLoading) return;
     try {
+      HapticFeedback.lightImpact();
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
@@ -105,11 +117,16 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      _showError('Failed to pick image: $e');
+      EstarFriendlyError.showSnackBar(
+        context,
+        'Failed to select image. Please try again.',
+      );
     }
   }
 
   void _removeImage(int index) {
+    if (_isLoading) return;
+    HapticFeedback.lightImpact();
     setState(() {
       _selectedImages[index] = null;
     });
@@ -118,7 +135,10 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
   Future<void> _locateAddressOnMap() async {
     final address = _addressController.text.trim();
     if (address.isEmpty) {
-      _showError('Please enter an address to search.');
+      EstarFriendlyError.showSnackBar(
+        context,
+        'Please enter an address to search on the map.',
+      );
       return;
     }
 
@@ -137,12 +157,28 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
             _selectedLocation = newLocation;
           });
           _mapController.move(newLocation, 15.0);
+          if (mounted) {
+            EstarFriendlyError.showSuccessSnackBar(
+              context,
+              'Address located and pinned on map.',
+            );
+          }
         }
       } else {
-        _showError('Address not found on map. You can tap the map to place the pin.');
+        if (mounted) {
+          EstarFriendlyError.showSnackBar(
+            context,
+            'Address not found on map. You can tap the map directly to place the pin.',
+          );
+        }
       }
     } catch (e) {
-      _showError('Geocoding error: $e');
+      if (mounted) {
+        EstarFriendlyError.showSnackBar(
+          context,
+          'Unable to search address at this time. Please pin directly on the map.',
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -160,37 +196,57 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
     final address = _addressController.text.trim();
 
     if (title.isEmpty) {
-      _showError('Please enter a property title.');
+      EstarFriendlyError.showSnackBar(
+        context,
+        'Please enter a property title.',
+      );
       return;
     }
     if (description.isEmpty) {
-      _showError('Please enter a property description.');
+      EstarFriendlyError.showSnackBar(
+        context,
+        'Please enter a property description.',
+      );
       return;
     }
     if (rateText.isEmpty) {
-      _showError('Please enter a monthly rate.');
+      EstarFriendlyError.showSnackBar(
+        context,
+        'Please enter a monthly rate.',
+      );
       return;
     }
     final monthlyRate = double.tryParse(rateText);
     if (monthlyRate == null || monthlyRate <= 0) {
-      _showError('Please enter a valid numeric monthly rate.');
+      EstarFriendlyError.showSnackBar(
+        context,
+        'Please enter a valid numeric monthly rate.',
+      );
       return;
     }
     if (address.isEmpty) {
-      _showError('Please enter the property address.');
+      EstarFriendlyError.showSnackBar(
+        context,
+        'Please enter the property address.',
+      );
       return;
     }
 
     final hasAtLeastOneImage = _selectedImages.any((img) => img != null);
     if (!hasAtLeastOneImage) {
-      _showError('Please upload at least 1 property photo.');
+      EstarFriendlyError.showSnackBar(
+        context,
+        'Please upload at least 1 property photo.',
+      );
       return;
     }
 
-    // Resolve Seller ID before async gaps (Fixes BUG-03: no hardcoded fallback)
     final sellerId = _getSellerId();
     if (sellerId.isEmpty) {
-      _showError('Authentication error. Please log in again to publish.');
+      EstarFriendlyError.showSnackBar(
+        context,
+        'Authentication required. Please log in again to publish.',
+      );
       return;
     }
 
@@ -199,7 +255,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
     });
 
     try {
-      // 1. Pass the final pinned coordinates (replacing hidden geocoding step)
+      // 1. Pass the final pinned coordinates
       final latitude = _selectedLocation?.latitude ?? 7.0736;
       final longitude = _selectedLocation?.longitude ?? 125.6110;
 
@@ -243,18 +299,18 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Listing published successfully!'),
-          backgroundColor: Color(0xFF111827),
-          behavior: SnackBarBehavior.floating,
-        ),
+      EstarFriendlyError.showSuccessSnackBar(
+        context,
+        'Listing published successfully!',
       );
 
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      _showError('Failed to publish listing: $e');
+      EstarFriendlyError.showSnackBar(
+        context,
+        EstarFriendlyError.mask(e),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -264,24 +320,15 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
     }
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: const Color(0xFFE11D48),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
   Widget _buildDropzone(int index) {
     final imageFile = _selectedImages[index];
+    final isCover = index == 0;
 
     return SizedBox(
       width: 104.0,
       height: 104.0,
       child: GestureDetector(
-        onTap: () => _pickImage(index),
+        onTap: _isLoading ? null : () => _pickImage(index),
         child: imageFile != null
             ? Stack(
                 fit: StackFit.expand,
@@ -293,11 +340,35 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                       fit: BoxFit.cover,
                     ),
                   ),
+                  if (isCover)
+                    Positioned(
+                      bottom: 6.0,
+                      left: 6.0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6.0,
+                          vertical: 2.0,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xE6E11D48),
+                          borderRadius: BorderRadius.circular(6.0),
+                        ),
+                        child: const Text(
+                          'COVER',
+                          style: TextStyle(
+                            fontSize: 9.0,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
                   Positioned(
                     top: 6.0,
                     right: 6.0,
                     child: GestureDetector(
-                      onTap: () => _removeImage(index),
+                      onTap: _isLoading ? null : () => _removeImage(index),
                       child: Container(
                         padding: const EdgeInsets.all(4.0),
                         decoration: const BoxDecoration(
@@ -305,7 +376,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
-                          Icons.close,
+                          Icons.close_rounded,
                           size: 14.0,
                           color: Colors.white,
                         ),
@@ -316,32 +387,40 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
               )
             : CustomPaint(
                 painter: DashedBorderPainter(
-                  color: const Color(0xFFCBD5E1),
-                  strokeWidth: 2.0,
-                  dashWidth: 8.0,
-                  dashSpace: 6.0,
+                  color: isCover
+                      ? const Color(0xFFFDA4AF)
+                      : const Color(0xFFE2E8F0),
+                  strokeWidth: 1.5,
+                  dashWidth: 6.0,
+                  dashSpace: 4.0,
                   radius: 16.0,
                 ),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: isCover
+                        ? const Color(0xFFFFF1F2).withValues(alpha: 0.5)
+                        : Colors.white,
                     borderRadius: BorderRadius.circular(16.0),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.add_photo_alternate_outlined,
-                        color: Color(0xFFE11D48),
-                        size: 28.0,
+                        color: isCover
+                            ? const Color(0xFFE11D48)
+                            : const Color(0xFF94A3B8),
+                        size: 26.0,
                       ),
                       const SizedBox(height: 6.0),
                       Text(
-                        'Photo ${index + 1}',
+                        isCover ? 'Cover Photo' : 'Photo ${index + 1}',
                         style: TextStyle(
-                          fontSize: 12.0,
+                          fontSize: 11.0,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade600,
+                          color: isCover
+                              ? const Color(0xFFE11D48)
+                              : Colors.grey.shade600,
                         ),
                       ),
                     ],
@@ -354,40 +433,50 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final parsedAmenities = _amenitiesController.text
+        .split(',')
+        .map((a) => a.trim())
+        .where((a) => a.isNotEmpty)
+        .toList();
+
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAFA),
       appBar: AppBar(
         scrolledUnderElevation: 0,
         elevation: 0,
         backgroundColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Color(0xFF111827),
-            size: 20.0,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16.0),
+          child: Center(
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x0F000000),
+                    blurRadius: 10.0,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: Color(0xFF111827),
+                  size: 18.0,
+                ),
+                onPressed: () => Navigator.maybePop(context),
+              ),
+            ),
           ),
-          onPressed: () => Navigator.maybePop(context),
         ),
       ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.fromLTRB(24.0, 12.0, 24.0, 24.0),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x0A000000),
-              blurRadius: 20.0,
-              offset: Offset(0, -4),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: EstarButton(
-            text: 'Publish Listing',
-            isLoading: _isLoading,
-            onPressed: _isLoading ? null : _handlePublish,
-          ),
+      bottomNavigationBar: EstarStickyBottomBar(
+        child: EstarButton(
+          text: 'Publish Listing',
+          isLoading: _isLoading,
+          onPressed: _isLoading ? null : _handlePublish,
         ),
       ),
       body: SafeArea(
@@ -398,11 +487,31 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Massive Header
+                // Tag & Massive Header
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10.0,
+                    vertical: 4.0,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF1F2),
+                    borderRadius: BorderRadius.circular(20.0),
+                  ),
+                  child: const Text(
+                    'NEW PROPERTY',
+                    style: TextStyle(
+                      color: Color(0xFFE11D48),
+                      fontSize: 11.0,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8.0),
                 const Text(
                   'Create Listing',
                   style: TextStyle(
-                    fontSize: 36.0,
+                    fontSize: 32.0,
                     fontWeight: FontWeight.w900,
                     letterSpacing: -1.0,
                     color: Color(0xFF111827),
@@ -423,13 +532,26 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 const SizedBox(height: 28.0),
 
                 // Image Upload Label
-                const Text(
-                  'Property Photos (Up to 3)',
-                  style: TextStyle(
-                    fontSize: 13.0,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF0F172A),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Property Photos',
+                      style: TextStyle(
+                        fontSize: 13.0,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    Text(
+                      '${_selectedImages.where((img) => img != null).length} of 3 uploaded',
+                      style: TextStyle(
+                        fontSize: 12.0,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 10.0),
 
@@ -452,7 +574,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                   'Property Title',
                   style: TextStyle(
                     fontSize: 13.0,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: Color(0xFF0F172A),
                   ),
                 ),
@@ -460,6 +582,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 EstarTextField(
                   controller: _titleController,
                   hintText: 'e.g. Modern Studio near University',
+                  enabled: !_isLoading,
                 ),
                 const SizedBox(height: 20.0),
 
@@ -468,7 +591,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                   'Description',
                   style: TextStyle(
                     fontSize: 13.0,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: Color(0xFF0F172A),
                   ),
                 ),
@@ -477,6 +600,8 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                   controller: _descriptionController,
                   hintText:
                       'Describe property features, house rules, nearby transit...',
+                  enabled: !_isLoading,
+                  maxLines: 3,
                 ),
                 const SizedBox(height: 20.0),
 
@@ -485,7 +610,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                   'Monthly Rate (₱)',
                   style: TextStyle(
                     fontSize: 13.0,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: Color(0xFF0F172A),
                   ),
                 ),
@@ -494,15 +619,21 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                   controller: _rateController,
                   hintText: 'e.g. 15000',
                   keyboardType: TextInputType.number,
+                  enabled: !_isLoading,
+                  prefixIcon: const Icon(
+                    Icons.payments_outlined,
+                    color: Color(0xFF94A3B8),
+                    size: 20.0,
+                  ),
                 ),
                 const SizedBox(height: 20.0),
 
-                // Amenities Input
+                // Amenities Input & Preview
                 const Text(
                   'Amenities (comma separated)',
                   style: TextStyle(
                     fontSize: 13.0,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: Color(0xFF0F172A),
                   ),
                 ),
@@ -510,7 +641,54 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 EstarTextField(
                   controller: _amenitiesController,
                   hintText: 'e.g. WiFi, Air Conditioning, Kitchen, Gym',
+                  enabled: !_isLoading,
+                  prefixIcon: const Icon(
+                    Icons.star_outline_rounded,
+                    color: Color(0xFF94A3B8),
+                    size: 20.0,
+                  ),
                 ),
+                if (parsedAmenities.isNotEmpty) ...[
+                  const SizedBox(height: 10.0),
+                  Wrap(
+                    spacing: 6.0,
+                    runSpacing: 6.0,
+                    children: parsedAmenities.map((amenity) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10.0,
+                          vertical: 5.0,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF1F2),
+                          borderRadius: BorderRadius.circular(20.0),
+                          border: Border.all(
+                            color: const Color(0xFFFFE4E6),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.check_circle_rounded,
+                              size: 13.0,
+                              color: Color(0xFFE11D48),
+                            ),
+                            const SizedBox(width: 4.0),
+                            Text(
+                              amenity,
+                              style: const TextStyle(
+                                fontSize: 12.0,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFE11D48),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
                 const SizedBox(height: 20.0),
 
                 // Address Input with Auto-Locate Search Button
@@ -518,7 +696,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                   'Address',
                   style: TextStyle(
                     fontSize: 13.0,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: Color(0xFF0F172A),
                   ),
                 ),
@@ -530,6 +708,12 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                       child: EstarTextField(
                         controller: _addressController,
                         hintText: 'e.g. 2401 Taft Ave, Malate, Manila',
+                        enabled: !_isLoading && !_isGeocoding,
+                        prefixIcon: const Icon(
+                          Icons.location_on_outlined,
+                          color: Color(0xFF94A3B8),
+                          size: 20.0,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10.0),
@@ -539,31 +723,46 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                       decoration: BoxDecoration(
                         color: const Color(0xFFE11D48),
                         borderRadius: BorderRadius.circular(12.0),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFE11D48)
+                                .withValues(alpha: 0.25),
+                            blurRadius: 10.0,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                      child: IconButton(
-                        icon: _isGeocoding
-                            ? const SizedBox(
-                                width: 20.0,
-                                height: 20.0,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.0,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12.0),
+                          onTap: (_isLoading || _isGeocoding)
+                              ? null
+                              : _locateAddressOnMap,
+                          child: Center(
+                            child: _isGeocoding
+                                ? const SizedBox(
+                                    width: 20.0,
+                                    height: 20.0,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.search_rounded,
+                                    color: Colors.white,
+                                    size: 22.0,
                                   ),
-                                ),
-                              )
-                            : const Icon(
-                                Icons.search,
-                                color: Colors.white,
-                                size: 24.0,
-                              ),
-                        tooltip: 'Search & Locate',
-                        onPressed: _isGeocoding ? null : _locateAddressOnMap,
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16.0),
+                const SizedBox(height: 20.0),
 
                 // Interactive Map Container
                 Row(
@@ -573,12 +772,12 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                       'Pin Location on Map',
                       style: TextStyle(
                         fontSize: 13.0,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         color: Color(0xFF0F172A),
                       ),
                     ),
                     Text(
-                      'Tap to place or move pin',
+                      'Tap map to place pin',
                       style: TextStyle(
                         fontSize: 12.0,
                         color: Colors.grey.shade500,
@@ -588,9 +787,9 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 ),
                 const SizedBox(height: 8.0),
                 Container(
-                  height: 250.0,
+                  height: 240.0,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16.0),
+                    borderRadius: BorderRadius.circular(18.0),
                     border: Border.all(color: const Color(0xFFE2E8F0)),
                     boxShadow: const [
                       BoxShadow(
@@ -601,47 +800,96 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                     ],
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter:
-                          _selectedLocation ?? const LatLng(7.0736, 125.6110),
-                      initialZoom: 15.0,
-                      onTap: (tapPosition, point) {
-                        setState(() {
-                          _selectedLocation = point;
-                        });
-                      },
-                    ),
+                  child: Stack(
                     children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.example.estarko',
-                      ),
-                      if (_selectedLocation != null)
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: _selectedLocation!,
-                              width: 44.0,
-                              height: 44.0,
-                              child: const Icon(
-                                Icons.location_on,
-                                color: Color(0xFFE11D48),
-                                size: 44.0,
-                              ),
-                            ),
-                          ],
+                      FlutterMap(
+                        mapController: _mapController,
+                        options: MapOptions(
+                          initialCenter: _selectedLocation ??
+                              const LatLng(7.0736, 125.6110),
+                          initialZoom: 15.0,
+                          onTap: (tapPosition, point) {
+                            if (!_isLoading) {
+                              HapticFeedback.lightImpact();
+                              setState(() {
+                                _selectedLocation = point;
+                              });
+                            }
+                          },
                         ),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.example.estarko',
+                          ),
+                          if (_selectedLocation != null)
+                            MarkerLayer(
+                              markers: [
+                                Marker(
+                                  point: _selectedLocation!,
+                                  width: 44.0,
+                                  height: 44.0,
+                                  child: const Icon(
+                                    Icons.location_on_rounded,
+                                    color: Color(0xFFE11D48),
+                                    size: 44.0,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                      Positioned(
+                        bottom: 12.0,
+                        left: 12.0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10.0,
+                            vertical: 6.0,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.94),
+                            borderRadius: BorderRadius.circular(20.0),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x14000000),
+                                blurRadius: 8.0,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.touch_app_rounded,
+                                size: 14.0,
+                                color: Color(0xFFE11D48),
+                              ),
+                              const SizedBox(width: 4.0),
+                              Text(
+                                _selectedLocation != null
+                                    ? 'Pinned: ${_selectedLocation!.latitude.toStringAsFixed(4)}, ${_selectedLocation!.longitude.toStringAsFixed(4)}'
+                                    : 'Tap map to place pin',
+                                style: const TextStyle(
+                                  fontSize: 11.0,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF1E293B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 32.0),
+                const SizedBox(height: 100.0),
               ]
-                  .animate(interval: 100.ms)
+                  .animate(interval: 50.ms)
                   .fade(duration: 400.ms)
-                  .slideY(begin: 0.1, curve: Curves.easeOutQuad),
+                  .slideY(begin: 0.05, curve: Curves.easeOutQuad),
             ),
           ),
         ),

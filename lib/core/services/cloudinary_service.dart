@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 class CloudinaryService {
@@ -8,9 +9,14 @@ class CloudinaryService {
   final String uploadPreset;
 
   CloudinaryService({
-    this.cloudName = "gyv0xeph",
-    this.uploadPreset = 'estarko_preset',
-  });
+    String? cloudName,
+    String? uploadPreset,
+  })  : cloudName = cloudName ??
+            (dotenv.isInitialized ? dotenv.env['CLOUDINARY_CLOUD_NAME'] : null) ??
+            'gyv0xeph',
+        uploadPreset = uploadPreset ??
+            (dotenv.isInitialized ? dotenv.env['CLOUDINARY_UPLOAD_PRESET'] : null) ??
+            'estarko_preset';
 
   Future<String?> uploadImage(File imageFile) async {
     try {

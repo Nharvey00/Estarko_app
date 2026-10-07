@@ -390,9 +390,11 @@ class _TenantInquiriesScreenState extends State<TenantInquiriesScreen> {
                         }
 
                         return ListView.separated(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24.0,
-                            vertical: 16.0,
+                          padding: const EdgeInsets.fromLTRB(
+                            24.0,
+                            16.0,
+                            24.0,
+                            120.0,
                           ),
                           itemCount: inquiries.length,
                           separatorBuilder: (context, index) =>

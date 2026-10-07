@@ -52,7 +52,11 @@ class _SellerUploadScreenState extends State<SellerUploadScreen> {
         return authProvider.currentUser!.uid;
       }
     } catch (_) {}
-    return FirebaseAuth.instance.currentUser?.uid ?? '';
+    try {
+      return FirebaseAuth.instance.currentUser?.uid ?? '';
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<void> _pickImage() async {
@@ -315,9 +319,7 @@ class _SellerUploadScreenState extends State<SellerUploadScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () {
-                Provider.of<AuthProvider>(context, listen: false).logout();
-              },
+              onPressed: _handleBackOrLogout,
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF64748B),
                 side: const BorderSide(color: Color(0xFFCBD5E1)),
@@ -561,40 +563,60 @@ class _SellerUploadScreenState extends State<SellerUploadScreen> {
     );
   }
 
+  Stream<VerificationModel?>? _getVerificationStream(String sellerId) {
+    if (sellerId.isEmpty) return null;
+    try {
+      return _verificationService.getSellerVerification(sellerId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _handleBackOrLogout() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    await authProvider.logout(context: context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final sellerId = _getSellerId(context);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_outlined,
-            color: Color(0xFF111827),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackOrLogout();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFAFAFA),
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          leading: IconButton(
+            icon: const Icon(
+              Icons.arrow_back_outlined,
+              color: Color(0xFF111827),
+            ),
+            tooltip: 'Back to Sign In',
+            onPressed: _handleBackOrLogout,
           ),
-          onPressed: () {
-            Provider.of<AuthProvider>(context, listen: false).logout();
-          },
         ),
-      ),
-      body: SafeArea(
-        child: sellerId.isEmpty
-            ? _buildUploadForm()
-            : StreamBuilder<VerificationModel?>(
-                stream: _verificationService.getSellerVerification(sellerId),
-                builder: (context, snapshot) {
-                  if (snapshot.hasData &&
-                      snapshot.data != null &&
-                      snapshot.data!.status.toLowerCase() == 'pending') {
-                    return _buildUnderReviewState(snapshot.data!);
-                  }
-                  return _buildUploadForm();
-                },
-              ),
+        body: SafeArea(
+          child: sellerId.isEmpty
+              ? _buildUploadForm()
+              : StreamBuilder<VerificationModel?>(
+                  stream: _getVerificationStream(sellerId),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData &&
+                        snapshot.data != null &&
+                        snapshot.data!.status.toLowerCase() == 'pending') {
+                      return _buildUnderReviewState(snapshot.data!);
+                    }
+                    return _buildUploadForm();
+                  },
+                ),
+        ),
       ),
     );
   }

@@ -1,22 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'core/theme.dart';
+import 'splash_screen.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/views/login_screen.dart';
 import 'features/verification/providers/verification_provider.dart';
-import 'features/verification/views/admin_dashboard.dart';
-import 'features/verification/views/seller_upload_screen.dart';
-import 'features/listings/views/seller_dashboard_screen.dart';
-import 'features/tenant/views/tenant_main_screen.dart';
 import 'features/inquiries/providers/inquiry_provider.dart';
 import 'features/favorites/providers/favorite_provider.dart';
 
 import 'shared/widgets/skeleton_loader.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (e) {
+    debugPrint('Environment file (.env) load warning: $e');
+  }
 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
@@ -44,7 +50,7 @@ class EstarKoApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'EstarKo',
       theme: appTheme,
-      home: const AuthWrapper(),
+      home: const SplashScreen(),
     );
   }
 }
@@ -57,8 +63,8 @@ class AuthWrapper extends StatelessWidget {
     final authProvider = Provider.of<AuthProvider>(context);
     final user = authProvider.currentUser;
 
-    // Show EstarSkeleton loader while session is being verified
-    if (authProvider.isLoading) {
+    // Show EstarSkeleton loader while initial startup session is being verified
+    if (authProvider.isInitialLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFFFAFAFA),
         body: Center(
@@ -76,25 +82,7 @@ class AuthWrapper extends StatelessWidget {
       return const LoginScreen();
     }
 
-    // If currentUser.role == 'admin', return AdminDashboard()
-    if (user.role == 'admin') {
-      return const AdminDashboard();
-    }
-
-    // If currentUser.role == 'seller'
-    if (user.role == 'seller') {
-      // If currentUser.isVerified == false, return SellerUploadScreen()
-      if (!user.isVerified) {
-        return const SellerUploadScreen();
-      }
-      return const SellerDashboardScreen();
-    }
-
-    // If currentUser.role == 'tenant'
-    if (user.role == 'tenant') {
-      return const TenantMainScreen();
-    }
-
-    return const LoginScreen();
+    // Strict centralized routing based on user role and verification status
+    return authProvider.getDestinationScreen(user);
   }
 }
